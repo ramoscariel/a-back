@@ -10,9 +10,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/messages")
@@ -21,7 +24,7 @@ public class MessageController {
 
     private final MessageRepository messageRepo;
     private final UserRepository userRepo;
-
+    private final RestTemplate restTemplate;
 
     @GetMapping
     public List<Message> getUserMessages(@AuthenticationPrincipal Jwt jwt) {
@@ -57,4 +60,39 @@ public class MessageController {
         messageRepo.delete(message);
         return ResponseEntity.noContent().build();
     }
+
+    // "Public" Endpoints
+    @GetMapping("/public/list")
+    public List<Long> getUserMessageIds(@AuthenticationPrincipal Jwt jwt) {
+        return messageRepo.findByUserId(jwt.getSubject())
+                .stream()
+                .map(Message::getId)
+                .toList();
+    }
+
+    @PostMapping("/public/{id}")
+    public ResponseEntity<?> getMessage(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        Message message = messageRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+
+        if (!message.getUser().getId().equals(jwt.getSubject()))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+
+        try {
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("message", message.getMessage());
+            requestBody.put("id", message.getId());
+
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                    "https://j43ga1x7sa.execute-api.us-east-2.amazonaws.com/default/encrypt",
+                    requestBody,
+                    String.class
+            );
+
+            return ResponseEntity.ok(response.getBody());
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to encrypt message");
+        }
+    }
+
 }
