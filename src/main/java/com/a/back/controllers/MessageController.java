@@ -72,8 +72,13 @@ public class MessageController {
 
     @PostMapping("/public/{id}")
     public ResponseEntity<?> getMessage(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+
+
         Message message = messageRepo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+
+        System.out.println("Message user ID: " + message.getUser().getId());
+        System.out.println("JWT subject: " + jwt.getSubject());
 
         if (!message.getUser().getId().equals(jwt.getSubject()))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
